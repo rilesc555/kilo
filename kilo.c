@@ -255,7 +255,9 @@ void editorMoveCursor(int key) {
     case ARROW_RIGHT: {
       if (row && E.cx < row->size) {
         E.cx++;
-        E.virtx++;
+        if (E.virtx < INT_MAX) {
+          E.virtx++;
+        }
       }
       break;
     }
@@ -298,6 +300,7 @@ void editorProcessKeypress(void) {
 
     case HOME_KEY:
       E.cx = 0;
+      E.virtx = 0;
       break;
 
     case END_KEY: {
