@@ -106,6 +106,8 @@ int editorReadKey(void) {
           switch (seq[1]) {
             case '1':
               return HOME_KEY;
+            case '3':
+              return DEL_KEY;
             case '4':
               return END_KEY;
             case '5':
@@ -134,7 +136,7 @@ int editorReadKey(void) {
             return END_KEY;
         }
       }
-    } else if (seq[0] == '0') {
+    } else if (seq[0] == 'O') {
       switch (seq[1]) {
         case 'H':
           return HOME_KEY;
@@ -147,36 +149,38 @@ int editorReadKey(void) {
     return c;
 }
 
-// int getCursorPosition(int* rows, int* cols) {
-//   char buf[32];
-//   unsigned int i = 0;
-//
-//   if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4)
-//     return -1;
-//
-//   while (i < sizeof(buf) - 1) {
-//     if (read(STDIN_FILENO, &buf[i], 1) != 1)
-//       break;
-//     if (buf[i] == 'R')
-//       break;
-//     i++;
-//   }
-//
-//   buf[i] = '\0';
-//
-//   if (buf[0] != '\x1b' || buf[1] != '[')
-//     return -1;
-//   if (sscanf(&buf[2], "%d;%d", rows, cols) != 2)
-//     return -1;
-//
-//   return -1;
-// }
+int getCursorPosition(int* rows, int* cols) {
+  char buf[32];
+  unsigned int i = 0;
+
+  if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4)
+    return -1;
+
+  while (i < sizeof(buf) - 1) {
+    if (read(STDIN_FILENO, &buf[i], 1) != 1)
+      break;
+    if (buf[i] == 'R')
+      break;
+    i++;
+  }
+
+  buf[i] = '\0';
+
+  if (buf[0] != '\x1b' || buf[1] != '[')
+    return -1;
+  if (sscanf(&buf[2], "%d;%d", rows, cols) != 2)
+    return -1;
+
+  return 0;
+}
 
 int getWindowSize(int* rows, int* cols) {
   struct winsize ws;
 
   if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-    return -1;
+    if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12)
+      return -1;
+    return getCursorPosition(rows, cols);
   } else {
     *cols = ws.ws_col;
     *rows = ws.ws_row;
@@ -207,13 +211,14 @@ void editorOpen(char* filename) {
   char* line = NULL;
   size_t linecap = 0;
   ssize_t linelen;
-  linelen = getline(&line, &linecap, fp);
   while ((linelen = getline(&line, &linecap, fp)) != -1) {
     while (linelen > 0 &&
            (line[linelen - 1] == '\n' || line[linelen - 1] == '\r'))
       linelen--;
     editorAppendRow(line, linelen);
   }
+  free(line);
+  fclose(fp);
 }
 
 /*** append buffer ***/
@@ -249,6 +254,10 @@ void editorMoveCursor(int key) {
       if (E.cx != 0) {
         E.cx--;
         E.virtx = E.cx;
+      } else if (E.cy > 0) {
+        E.cy--;
+        E.cx = E.row[E.cy].size;
+        E.virtx = E.cx;
       }
       break;
     }
@@ -258,6 +267,10 @@ void editorMoveCursor(int key) {
         if (E.virtx < INT_MAX) {
           E.virtx++;
         }
+      } else if (row && E.cx == row->size) {
+        E.cy++;
+        E.cx = 0;
+        E.virtx = E.cx;
       }
       break;
     }
